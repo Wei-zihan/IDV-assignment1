@@ -3,8 +3,52 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PSI Data - GitHub Pages</title>
-  <link rel="stylesheet" href="styles.css" />
+  <title>Realtime PSI Readings</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #e0f7fa;
+      color: #00695c;
+      margin: 0;
+      padding: 0;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 50px auto;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 2.5em;
+      color: #004d40;
+    }
+
+    table {
+      width: 80%;
+      margin: 20px auto;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      padding: 15px;
+      border: 1px solid #004d40;
+    }
+
+    th {
+      background-color: #004d40;
+      color: white;
+    }
+
+    td {
+      text-align: center;
+      background-color: #b2dfdb;
+    }
+
+    tbody tr:nth-child(odd) {
+      background-color: #80cbc4;
+    }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -22,6 +66,41 @@
     </table>
   </div>
 
-  <script src="app.js"></script>
+  <script>
+    const apiUrl = 'https://api.data.gov.sg/v1/environment/psi';
+
+    async function fetchPSIData() {
+      try {
+        const response = await fetch(apiUrl);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        const readings = data.items[0].readings;
+        const tableBody = document.querySelector('#psi-table tbody');
+
+        tableBody.innerHTML = ''; // 清空旧数据
+
+        for (const key in readings) {
+          if (readings.hasOwnProperty(key)) {
+            const row = document.createElement('tr');
+            const cell1 = document.createElement('td');
+            cell1.textContent = key;
+            const cell2 = document.createElement('td');
+            cell2.textContent = readings[key];
+            row.appendChild(cell1);
+            row.appendChild(cell2);
+            tableBody.appendChild(row);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching PSI data:', error);
+        const tableBody = document.querySelector('#psi-table tbody');
+        tableBody.innerHTML = `<tr><td colspan="2">Error loading data.</td></tr>`;
+      }
+    }
+
+    window.onload = fetchPSIData;
+  </script>
 </body>
 </html>

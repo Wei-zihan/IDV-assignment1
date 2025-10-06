@@ -1,34 +1,34 @@
 const apiUrl = 'https://api.data.gov.sg/v1/environment/psi';
 
-// Function to fetch and display the PSI data
-function fetchPSIData() {
-  fetch(apiUrl)
-    .then(response => response.json())
-    .then(data => {
-      const readings = data.items[0].readings;
-      const tableBody = document.querySelector('#psi-table tbody');
-      
-      // Clear any existing table rows
-      tableBody.innerHTML = '';
+async function fetchPSIData() {
+  try {
+    const response = await fetch(apiUrl);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    const readings = data.items[0].readings;
+    const tableBody = document.querySelector('#psi-table tbody');
 
-      // Insert new rows
-      for (let key in readings) {
-        if (readings.hasOwnProperty(key)) {
-          let row = document.createElement('tr');
-          let cell1 = document.createElement('td');
-          cell1.textContent = key;
-          let cell2 = document.createElement('td');
-          cell2.textContent = readings[key];
-          row.appendChild(cell1);
-          row.appendChild(cell2);
-          tableBody.appendChild(row);
-        }
+    tableBody.innerHTML = ''; // 清空旧数据
+
+    for (const key in readings) {
+      if (readings.hasOwnProperty(key)) {
+        const row = document.createElement('tr');
+        const cell1 = document.createElement('td');
+        cell1.textContent = key;
+        const cell2 = document.createElement('td');
+        cell2.textContent = readings[key];
+        row.appendChild(cell1);
+        row.appendChild(cell2);
+        tableBody.appendChild(row);
       }
-    })
-    .catch(error => {
-      console.error('Error fetching PSI data:', error);
-    });
+    }
+  } catch (error) {
+    console.error('Error fetching PSI data:', error);
+    const tableBody = document.querySelector('#psi-table tbody');
+    tableBody.innerHTML = `<tr><td colspan="2">Error loading data.</td></tr>`;
+  }
 }
 
-// Call the function when the page loads
 window.onload = fetchPSIData;

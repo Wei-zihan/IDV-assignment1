@@ -1,106 +1,961 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Realtime PSI Readings</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #e0f7fa;
-      color: #00695c;
-      margin: 0;
-      padding: 0;
-    }
-
-    .container {
-      max-width: 1200px;
-      margin: 50px auto;
-      text-align: center;
-    }
-
-    h1 {
-      font-size: 2.5em;
-      color: #004d40;
-    }
-
-    table {
-      width: 80%;
-      margin: 20px auto;
-      border-collapse: collapse;
-    }
-
-    th, td {
-      padding: 15px;
-      border: 1px solid #004d40;
-    }
-
-    th {
-      background-color: #004d40;
-      color: white;
-    }
-
-    td {
-      text-align: center;
-      background-color: #b2dfdb;
-    }
-
-    tbody tr:nth-child(odd) {
-      background-color: #80cbc4;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Singapore PSI Real-time Data</title>
+    <!-- Tailwind CSS v3 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#4CAF50',
+                        secondary: '#2196F3',
+                        warning: '#FFC107',
+                        danger: '#F44336',
+                        light: '#F5F5F5',
+                        dark: '#212121'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .text-shadow {
+                text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .table-fixed-layout {
+                table-layout: fixed;
+            }
+            .cell-truncate {
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .bg-gradient-green {
+                background: linear-gradient(135deg, #4CAF50 0%, #8BC34A 100%);
+            }
+            .bg-gradient-blue {
+                background: linear-gradient(135deg, #2196F3 0%, #03A9F4 100%);
+            }
+        }
+    </style>
 </head>
-<body>
-  <div class="container">
-    <h1>Realtime PSI Readings</h1>
-    <table id="psi-table">
-      <thead>
-        <tr>
-          <th>Reading</th>
-          <th>Value</th>
-        </tr>
-      </thead>
-      <tbody>
-        <!-- Data rows will be inserted here -->
-      </tbody>
-    </table>
-  </div>
+<body class="bg-gray-50 font-sans">
+    <div class="min-h-screen flex flex-col">
+        <!-- Header -->
+        <header class="bg-gradient-green text-white shadow-md">
+            <div class="container mx-auto px-4 py-6">
+                <div class="flex flex-col md:flex-row justify-between items-center">
+                    <div class="flex items-center mb-4 md:mb-0">
+                        <i class="fa fa-leaf text-3xl mr-3"></i>
+                        <h1 class="text-2xl md:text-3xl font-bold text-shadow">Singapore PSI Real-time Data</h1>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <button id="refreshBtn" class="bg-white text-primary hover:bg-gray-100 px-4 py-2 rounded-md shadow transition-all flex items-center">
+                            <i class="fa fa-refresh mr-2"></i> Refresh Data
+                        </button>
+                        <div id="autoRefreshContainer" class="flex items-center">
+                            <input type="checkbox" id="autoRefresh" class="mr-2 h-4 w-4 accent-primary">
+                            <label for="autoRefresh" class="text-sm">Auto-refresh</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
 
-  <script>
-    const apiUrl = 'https://api.data.gov.sg/v1/environment/psi';
+        <!-- Main Content -->
+        <main class="flex-grow container mx-auto px-4 py-8">
+            <!-- Status Bar -->
+            <div id="statusBar" class="mb-6 p-4 bg-white rounded-md shadow-md flex justify-between items-center">
+                <div id="lastUpdated" class="text-gray-600">
+                    <i class="fa fa-clock-o mr-1"></i> Last updated: Loading...
+                </div>
+                <div id="apiStatus" class="flex items-center">
+                    <span class="inline-block w-3 h-3 rounded-full bg-green-500 mr-2"></span>
+                    <span class="text-gray-600">Data Loaded</span>
+                </div>
+            </div>
 
-    async function fetchPSIData() {
-      try {
-        const response = await fetch(apiUrl);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+            <!-- PSI Summary Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-primary">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-2">Overall PSI</h3>
+                    <div class="flex items-end">
+                        <span id="overallPsi" class="text-4xl font-bold text-primary">--</span>
+                        <span id="psiStatus" class="ml-2 px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">Good</span>
+                    </div>
+                    <p class="text-sm text-gray-500 mt-2">Based on 24-hour average</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-secondary">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-2">PM2.5 Level</h3>
+                    <div class="flex items-end">
+                        <span id="pm25Level" class="text-4xl font-bold text-secondary">--</span>
+                        <span class="ml-1 text-lg text-gray-500">μg/m³</span>
+                    </div>
+                    <p class="text-sm text-gray-500 mt-2">24-hour average concentration</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-yellow-500">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-2">Worst Hit Area</h3>
+                    <div class="flex items-center">
+                        <i class="fa fa-map-marker text-yellow-500 text-xl mr-2"></i>
+                        <span id="worstArea" class="text-2xl font-bold text-yellow-500">--</span>
+                    </div>
+                    <p id="worstAreaValue" class="text-sm text-gray-500 mt-2">PSI: --</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-2">Dominant Pollutant</h3>
+                    <div class="flex items-center">
+                        <i class="fa fa-info-circle text-purple-500 text-xl mr-2"></i>
+                        <span id="dominantPollutant" class="text-2xl font-bold text-purple-500">--</span>
+                    </div>
+                    <p id="dominantPollutantDesc" class="text-sm text-gray-500 mt-2">--</p>
+                </div>
+            </div>
+
+            <!-- Data Table -->
+            <div class="bg-white rounded-lg shadow-md overflow-hidden mb-8">
+                <div class="p-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                    <h2 class="text-xl font-semibold text-gray-700">PSI Readings</h2>
+                    <div class="flex items-center">
+                        <span class="text-sm text-gray-500 mr-2">Sort by:</span>
+                        <select id="sortSelect" class="text-sm border border-gray-300 rounded-md px-2 py-1">
+                            <option value="parameter">Parameter</option>
+                            <option value="national">National</option>
+                            <option value="central">Central</option>
+                            <option value="south">South</option>
+                            <option value="east">East</option>
+                            <option value="west">West</option>
+                            <option value="north">North</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table id="psiTable" class="min-w-full divide-y divide-gray-200 table-fixed-layout">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/5">Parameter</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/14">National</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/14">Central</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/14">South</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/14">East</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/14">West</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/14">North</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/14">Status</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/14">Health Effects</th>
+                            </tr>
+                        </thead>
+                        <tbody id="psiTableBody" class="bg-white divide-y divide-gray-200">
+                            <!-- Table rows will be dynamically generated here -->
+                            <tr>
+                                <td colspan="8" class="px-6 py-4 text-center text-gray-500">Loading data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4">PSI Levels by Region</h2>
+                    <div class="h-80">
+                        <canvas id="regionChart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4">Pollutant Levels</h2>
+                    <div class="h-80">
+                        <canvas id="pollutantChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-gray-800 text-white py-6">
+            <div class="container mx-auto px-4">
+                <div class="flex flex-col md:flex-row justify-between items-center">
+                    <div class="mb-4 md:mb-0">
+                        <p class="text-sm">Data source: <a href="https://data.gov.sg" target="_blank" class="text-primary hover:underline">data.gov.sg</a></p>
+                        <p class="text-xs text-gray-400 mt-1">API: <a href="https://api.data.gov.sg/v1/environment/psi" target="_blank" class="text-gray-300 hover:underline">https://api.data.gov.sg/v1/environment/psi</a></p>
+                    </div>
+                    <div class="text-sm text-gray-400">
+                        <p id="footerLastUpdated">Last updated: Loading...</p>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Loading Modal -->
+    <div id="loadingModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg p-6 flex flex-col items-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary mb-4"></div>
+            <p class="text-gray-700">Loading data...</p>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const AUTO_REFRESH_INTERVAL = 60000; // 1 minute in milliseconds
+        
+        // DOM Elements
+        const psiTableBody = document.getElementById('psiTableBody');
+        const lastUpdatedEl = document.getElementById('lastUpdated');
+        const footerLastUpdatedEl = document.getElementById('footerLastUpdated');
+        const refreshBtn = document.getElementById('refreshBtn');
+        const autoRefreshCheckbox = document.getElementById('autoRefresh');
+        const loadingModal = document.getElementById('loadingModal');
+        const sortSelect = document.getElementById('sortSelect');
+        
+        // Summary Cards
+        const overallPsiEl = document.getElementById('overallPsi');
+        const psiStatusEl = document.getElementById('psiStatus');
+        const pm25LevelEl = document.getElementById('pm25Level');
+        const worstAreaEl = document.getElementById('worstArea');
+        const worstAreaValueEl = document.getElementById('worstAreaValue');
+        const dominantPollutantEl = document.getElementById('dominantPollutant');
+        const dominantPollutantDescEl = document.getElementById('dominantPollutantDesc');
+        
+        // Charts
+        let regionChart = null;
+        let pollutantChart = null;
+        
+        // Auto-refresh interval ID
+        let autoRefreshIntervalId = null;
+        
+        // Parameter descriptions for better readability
+        const parameterDescriptions = {
+            'o3_sub_index': 'Ozone Sub-index',
+            'pm10_sub_index': 'PM10 Sub-index',
+            'pm25_sub_index': 'PM2.5 Sub-index',
+            'co_sub_index': 'Carbon Monoxide Sub-index',
+            'so2_sub_index': 'Sulphur Dioxide Sub-index',
+            'no2_sub_index': 'Nitrogen Dioxide Sub-index',
+            'psi_twenty_four_hourly': '24-hour PSI',
+            'pm10_twenty_four_hourly': '24-hour PM10',
+            'pm25_twenty_four_hourly': '24-hour PM2.5',
+            'so2_twenty_four_hourly': '24-hour SO2',
+            'co_twenty_four_hourly': '24-hour CO',
+            'o3_twenty_four_hourly': '24-hour Ozone',
+            'no2_one_hour_max': '1-hour Max NO2'
+        };
+        
+        // Pollutant descriptions
+        const pollutantDescriptions = {
+            'o3': 'Ozone',
+            'pm10': 'Particulate Matter (PM10)',
+            'pm25': 'Particulate Matter (PM2.5)',
+            'co': 'Carbon Monoxide',
+            'so2': 'Sulphur Dioxide',
+            'no2': 'Nitrogen Dioxide'
+        };
+        
+        // PSI status categories and colors based on Singapore NEA standards
+        const psiStatusCategories = [
+            { 
+                min: 0, 
+                max: 50, 
+                status: 'Good', 
+                color: 'bg-green-100 text-green-800',
+                healthEffects: 'Normal activities for everyone',
+                advisory: 'No restrictions needed'
+            },
+            { 
+                min: 51, 
+                max: 100, 
+                status: 'Moderate', 
+                color: 'bg-yellow-100 text-yellow-800',
+                healthEffects: 'Normal activities for everyone',
+                advisory: 'No restrictions needed'
+            },
+            { 
+                min: 101, 
+                max: 200, 
+                status: 'Unhealthy', 
+                color: 'bg-orange-100 text-orange-800',
+                healthEffects: 'Everyone may begin to experience health effects',
+                advisory: 'Healthy persons: Reduce prolonged or strenuous outdoor physical exertion. Elderly, pregnant women & children: Minimise prolonged or strenuous outdoor physical exertion. Persons with chronic lung disease or heart disease: Avoid prolonged or strenuous outdoor physical exertion.'
+            },
+            { 
+                min: 201, 
+                max: 300, 
+                status: 'Very Unhealthy', 
+                color: 'bg-red-100 text-red-800',
+                healthEffects: 'More may experience more serious health effects',
+                advisory: 'Healthy persons: Avoid prolonged or strenuous outdoor physical exertion. Elderly, pregnant women & children: Minimise outdoor activities. Persons with chronic lung disease or heart disease: Avoid outdoor activities.'
+            },
+            { 
+                min: 301, 
+                max: 500, 
+                status: 'Hazardous', 
+                color: 'bg-purple-100 text-purple-800',
+                healthEffects: 'Serious health effects for everyone',
+                advisory: 'Healthy persons: Minimise outdoor activities. Elderly, pregnant women & children: Avoid outdoor activities. persons with chronic lung disease or heart disease: Avoid outdoor activities.'
+            }
+        ];
+        
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', () => {
+            // Load mock data on page load
+            loadMockData();
+            
+            // Add event listeners
+            refreshBtn.addEventListener('click', loadMockData);
+            autoRefreshCheckbox.addEventListener('change', toggleAutoRefresh);
+            sortSelect.addEventListener('change', sortTable);
+            
+            // Disable auto-refresh by default
+            autoRefreshCheckbox.checked = false;
+        });
+        
+        // Load mock data
+        function loadMockData() {
+            showLoading();
+            
+            // Generate mock data with current timestamp
+            const now = new Date();
+            const mockData = generateMockData(now);
+            
+            // Process the mock data
+            processPsiData(mockData);
+            
+            hideLoading();
         }
-        const data = await response.json();
-        const readings = data.items[0].readings;
-        const tableBody = document.querySelector('#psi-table tbody');
-
-        tableBody.innerHTML = ''; // 清空旧数据
-
-        for (const key in readings) {
-          if (readings.hasOwnProperty(key)) {
-            const row = document.createElement('tr');
-            const cell1 = document.createElement('td');
-            cell1.textContent = key;
-            const cell2 = document.createElement('td');
-            cell2.textContent = readings[key];
-            row.appendChild(cell1);
-            row.appendChild(cell2);
-            tableBody.appendChild(row);
-          }
+        
+        // Generate mock data with realistic variations
+        function generateMockData(timestamp) {
+            // Base values
+            const basePsi = 45;
+            const basePm25 = 35;
+            
+            // Random variations for different regions (±10%)
+            const regionVariations = {
+                national: 1.0,
+                central: 0.93,
+                south: 1.07,
+                east: 0.89,
+                west: 1.11,
+                north: 0.96
+            };
+            
+            // Calculate values with variations
+            const calculateWithVariation = (baseValue, region) => {
+                const variation = regionVariations[region];
+                // Add small random fluctuation (±5%)
+                const randomFactor = 0.95 + Math.random() * 0.1;
+                return Math.round(baseValue * variation * randomFactor);
+            };
+            
+            // Generate mock data
+            return {
+                "items": [
+                    {
+                        "timestamp": timestamp.toISOString(),
+                        "update_timestamp": new Date(timestamp.getTime() + 2700000).toISOString(), // 45 minutes later
+                        "readings": {
+                            "o3_sub_index": {
+                                "national": calculateWithVariation(32, 'national'),
+                                "central": calculateWithVariation(30, 'central'),
+                                "south": calculateWithVariation(35, 'south'),
+                                "east": calculateWithVariation(28, 'east'),
+                                "west": calculateWithVariation(38, 'west'),
+                                "north": calculateWithVariation(31, 'north')
+                            },
+                            "pm10_sub_index": {
+                                "national": calculateWithVariation(45, 'national'),
+                                "central": calculateWithVariation(42, 'central'),
+                                "south": calculateWithVariation(48, 'south'),
+                                "east": calculateWithVariation(40, 'east'),
+                                "west": calculateWithVariation(50, 'west'),
+                                "north": calculateWithVariation(43, 'north')
+                            },
+                            "pm25_sub_index": {
+                                "national": calculateWithVariation(28, 'national'),
+                                "central": calculateWithVariation(25, 'central'),
+                                "south": calculateWithVariation(30, 'south'),
+                                "east": calculateWithVariation(22, 'east'),
+                                "west": calculateWithVariation(32, 'west'),
+                                "north": calculateWithVariation(26, 'north')
+                            },
+                            "co_sub_index": {
+                                "national": calculateWithVariation(15, 'national'),
+                                "central": calculateWithVariation(14, 'central'),
+                                "south": calculateWithVariation(16, 'south'),
+                                "east": calculateWithVariation(13, 'east'),
+                                "west": calculateWithVariation(18, 'west'),
+                                "north": calculateWithVariation(15, 'north')
+                            },
+                            "so2_sub_index": {
+                                "national": calculateWithVariation(8, 'national'),
+                                "central": calculateWithVariation(7, 'central'),
+                                "south": calculateWithVariation(9, 'south'),
+                                "east": calculateWithVariation(6, 'east'),
+                                "west": calculateWithVariation(10, 'west'),
+                                "north": calculateWithVariation(7, 'north')
+                            },
+                            "no2_sub_index": {
+                                "national": calculateWithVariation(12, 'national'),
+                                "central": calculateWithVariation(11, 'central'),
+                                "south": calculateWithVariation(13, 'south'),
+                                "east": calculateWithVariation(10, 'east'),
+                                "west": calculateWithVariation(15, 'west'),
+                                "north": calculateWithVariation(12, 'north')
+                            },
+                            "psi_twenty_four_hourly": {
+                                "national": calculateWithVariation(basePsi, 'national'),
+                                "central": calculateWithVariation(basePsi * 0.93, 'central'),
+                                "south": calculateWithVariation(basePsi * 1.07, 'south'),
+                                "east": calculateWithVariation(basePsi * 0.89, 'east'),
+                                "west": calculateWithVariation(basePsi * 1.11, 'west'),
+                                "north": calculateWithVariation(basePsi * 0.96, 'north')
+                            },
+                            "pm10_twenty_four_hourly": {
+                                "national": calculateWithVariation(55, 'national'),
+                                "central": calculateWithVariation(52, 'central'),
+                                "south": calculateWithVariation(58, 'south'),
+                                "east": calculateWithVariation(50, 'east'),
+                                "west": calculateWithVariation(60, 'west'),
+                                "north": calculateWithVariation(53, 'north')
+                            },
+                            "pm25_twenty_four_hourly": {
+                                "national": calculateWithVariation(basePm25, 'national'),
+                                "central": calculateWithVariation(basePm25 * 0.91, 'central'),
+                                "south": calculateWithVariation(basePm25 * 1.09, 'south'),
+                                "east": calculateWithVariation(basePm25 * 0.8, 'east'),
+                                "west": calculateWithVariation(basePm25 * 1.14, 'west'),
+                                "north": calculateWithVariation(basePm25 * 0.94, 'north')
+                            },
+                            "so2_twenty_four_hourly": {
+                                "national": calculateWithVariation(10, 'national'),
+                                "central": calculateWithVariation(9, 'central'),
+                                "south": calculateWithVariation(11, 'south'),
+                                "east": calculateWithVariation(8, 'east'),
+                                "west": calculateWithVariation(12, 'west'),
+                                "north": calculateWithVariation(9, 'north')
+                            },
+                            "co_twenty_four_hourly": {
+                                "national": (calculateWithVariation(5, 'national') / 10).toFixed(1),
+                                "central": (calculateWithVariation(4, 'central') / 10).toFixed(1),
+                                "south": (calculateWithVariation(5, 'south') / 10).toFixed(1),
+                                "east": (calculateWithVariation(4, 'east') / 10).toFixed(1),
+                                "west": (calculateWithVariation(6, 'west') / 10).toFixed(1),
+                                "north": (calculateWithVariation(5, 'north') / 10).toFixed(1)
+                            },
+                            "o3_twenty_four_hourly": {
+                                "national": calculateWithVariation(65, 'national'),
+                                "central": calculateWithVariation(62, 'central'),
+                                "south": calculateWithVariation(68, 'south'),
+                                "east": calculateWithVariation(60, 'east'),
+                                "west": calculateWithVariation(70, 'west'),
+                                "north": calculateWithVariation(63, 'north')
+                            },
+                            "no2_one_hour_max": {
+                                "national": calculateWithVariation(25, 'national'),
+                                "central": calculateWithVariation(23, 'central'),
+                                "south": calculateWithVariation(27, 'south'),
+                                "east": calculateWithVariation(22, 'east'),
+                                "west": calculateWithVariation(30, 'west'),
+                                "north": calculateWithVariation(24, 'north')
+                            }
+                        }
+                    }
+                ],
+                "region_metadata": [
+                    {
+                        "name": "national",
+                        "label_location": {
+                            "latitude": 1.35735,
+                            "longitude": 103.8198
+                        }
+                    },
+                    {
+                        "name": "central",
+                        "label_location": {
+                            "latitude": 1.3521,
+                            "longitude": 103.8198
+                        }
+                    },
+                    {
+                        "name": "east",
+                        "label_location": {
+                            "latitude": 1.3521,
+                            "longitude": 103.9198
+                        }
+                    },
+                    {
+                        "name": "west",
+                        "label_location": {
+                            "latitude": 1.3521,
+                            "longitude": 103.7198
+                        }
+                    },
+                    {
+                        "name": "north",
+                        "label_location": {
+                            "latitude": 1.4521,
+                            "longitude": 103.8198
+                        }
+                    },
+                    {
+                        "name": "south",
+                        "label_location": {
+                            "latitude": 1.2521,
+                            "longitude": 103.8198
+                        }
+                    }
+                ]
+            };
         }
-      } catch (error) {
-        console.error('Error fetching PSI data:', error);
-        const tableBody = document.querySelector('#psi-table tbody');
-        tableBody.innerHTML = `<tr><td colspan="2">Error loading data.</td></tr>`;
-      }
-    }
-
-    window.onload = fetchPSIData;
-  </script>
+        
+        // Process the PSI data and update the UI
+        function processPsiData(data) {
+            try {
+                // Get the latest reading
+                const latestReading = data.items[data.items.length - 1];
+                const timestamp = new Date(latestReading.timestamp);
+                
+                // Update last updated time
+                const formattedTime = formatDateTime(timestamp);
+                lastUpdatedEl.innerHTML = `<i class="fa fa-clock-o mr-1"></i> Last updated: ${formattedTime}`;
+                footerLastUpdatedEl.textContent = `Last updated: ${formattedTime}`;
+                
+                // Extract readings
+                const readings = latestReading.readings;
+                
+                // Update summary cards
+                updateSummaryCards(readings);
+                
+                // Generate table rows
+                generateTableRows(readings);
+                
+                // Update charts
+                updateCharts(readings);
+                
+            } catch (error) {
+                console.error('Error processing data:', error);
+                displayError('Failed to process data. Please try again later.');
+            }
+        }
+        
+        // Update summary cards with key information
+        function updateSummaryCards(readings) {
+            // Overall PSI (24-hour)
+            const overallPsi = readings.psi_twenty_four_hourly.national;
+            overallPsiEl.textContent = overallPsi;
+            
+            // Get PSI status
+            const psiStatus = getPsiStatus(overallPsi);
+            psiStatusEl.textContent = psiStatus.status;
+            psiStatusEl.className = `ml-2 px-2 py-1 text-xs rounded-full ${psiStatus.color}`;
+            
+            // PM2.5 Level (24-hour)
+            const pm25Level = readings.pm25_twenty_four_hourly.national;
+            pm25LevelEl.textContent = pm25Level;
+            
+            // Worst hit area
+            const worstArea = findWorstHitArea(readings.psi_twenty_four_hourly);
+            worstAreaEl.textContent = formatAreaName(worstArea.area);
+            worstAreaValueEl.textContent = `PSI: ${worstArea.value}`;
+            
+            // Dominant pollutant
+            const dominantPollutant = findDominantPollutant(readings);
+            dominantPollutantEl.textContent = pollutantDescriptions[dominantPollutant.pollutant] || dominantPollutant.pollutant;
+            dominantPollutantDescEl.textContent = `Highest in ${formatAreaName(dominantPollutant.area)}: ${dominantPollutant.value}`;
+        }
+        
+        // Generate table rows from readings
+        function generateTableRows(readings) {
+            // Clear existing rows
+            psiTableBody.innerHTML = '';
+            
+            // Get the 12 required parameters
+            const parameters = [
+                'o3_sub_index', 'pm10_sub_index', 'pm25_sub_index', 
+                'co_sub_index', 'so2_sub_index', 'no2_sub_index',
+                'psi_twenty_four_hourly', 'pm10_twenty_four_hourly', 
+                'pm25_twenty_four_hourly', 'so2_twenty_four_hourly',
+                'co_twenty_four_hourly', 'o3_twenty_four_hourly'
+            ];
+            
+            // Create a row for each parameter
+            parameters.forEach(param => {
+                if (readings[param]) {
+                    const row = document.createElement('tr');
+                    row.className = 'hover:bg-gray-50';
+                    
+                    // Parameter name
+                    const paramCell = document.createElement('td');
+                    paramCell.className = 'px-6 py-4 whitespace-nowrap font-medium text-gray-900';
+                    paramCell.textContent = parameterDescriptions[param] || param;
+                    row.appendChild(paramCell);
+                    
+                    // Regions data
+                    const regions = ['national', 'central', 'south', 'east', 'west', 'north'];
+                    regions.forEach(region => {
+                        const cell = document.createElement('td');
+                        cell.className = 'px-6 py-4 whitespace-nowrap text-gray-700';
+                        
+                        // Get the value
+                        const value = readings[param][region];
+                        
+                        // Format the value
+                        if (value === null || value === undefined) {
+                            cell.textContent = 'N/A';
+                            cell.className += ' text-gray-400';
+                        } else {
+                            cell.textContent = value;
+                            
+                            // Highlight extreme values for PSI
+                            if (param === 'psi_twenty_four_hourly') {
+                                const status = getPsiStatus(value);
+                                if (status.status === 'Unhealthy' || status.status === 'Very Unhealthy' || 
+                                    status.status === 'Hazardous') {
+                                    cell.className += ' font-bold';
+                                    cell.classList.add(...status.color.split(' '));
+                                }
+                            }
+                        }
+                        
+                        row.appendChild(cell);
+                    });
+                    
+                    // Status column (only for PSI)
+                    const statusCell = document.createElement('td');
+                    statusCell.className = 'px-6 py-4 whitespace-nowrap';
+                    
+                    if (param === 'psi_twenty_four_hourly') {
+                        const nationalValue = readings[param].national;
+                        const status = getPsiStatus(nationalValue);
+                        const statusSpan = document.createElement('span');
+                        statusSpan.className = `px-2 py-1 text-xs rounded-full ${status.color}`;
+                        statusSpan.textContent = status.status;
+                        statusCell.appendChild(statusSpan);
+                    }
+                    
+                    row.appendChild(statusCell);
+                    
+                    // Health Effects column (only for PSI)
+                    const healthCell = document.createElement('td');
+                    healthCell.className = 'px-6 py-4 whitespace-nowrap';
+                    
+                    if (param === 'psi_twenty_four_hourly') {
+                        const nationalValue = readings[param].national;
+                        const status = getPsiStatus(nationalValue);
+                        
+                        // Create health effects cell with tooltip
+                        const healthEffectsDiv = document.createElement('div');
+                        healthEffectsDiv.className = 'flex items-center';
+                        
+                        const healthEffectsText = document.createElement('span');
+                        healthEffectsText.textContent = status.healthEffects;
+                        healthEffectsText.className = 'text-sm';
+                        
+                        const tooltipIcon = document.createElement('i');
+                        tooltipIcon.className = 'fa fa-info-circle ml-2 text-blue-500 cursor-help';
+                        
+                        // Create tooltip
+                        const tooltip = document.createElement('div');
+                        tooltip.className = 'hidden absolute z-10 mt-2 p-3 bg-gray-800 text-white text-xs rounded-md shadow-lg w-64';
+                        tooltip.innerHTML = `
+                            <div class="font-semibold mb-1">Health Advisory</div>
+                            <div>${status.advisory}</div>
+                        ` ;
+                        
+                        // Add event listeners for tooltip
+                        tooltipIcon.addEventListener('mouseenter', () => {
+                            tooltip.classList.remove('hidden');
+                        });
+                        
+                        tooltipIcon.addEventListener('mouseleave', () => {
+                            tooltip.classList.add('hidden');
+                        });
+                        
+                        healthEffectsDiv.appendChild(healthEffectsText);
+                        healthEffectsDiv.appendChild(tooltipIcon);
+                        healthEffectsDiv.appendChild(tooltip);
+                        
+                        // Add relative positioning to parent for tooltip
+                        healthEffectsDiv.style.position = 'relative';
+                        
+                        healthCell.appendChild(healthEffectsDiv);
+                    }
+                    
+                    row.appendChild(healthCell);
+                    psiTableBody.appendChild(row);
+                }
+            });
+        }
+        
+        // Update charts with current data
+        function updateCharts(readings) {
+            // Update region chart (PSI levels by region)
+            updateRegionChart(readings.psi_twenty_four_hourly);
+            
+            // Update pollutant chart (PM2.5 levels)
+            updatePollutantChart(readings.pm25_twenty_four_hourly);
+        }
+        
+        // Update region chart
+        function updateRegionChart(psiData) {
+            const ctx = document.getElementById('regionChart').getContext('2d');
+            
+            // Extract data
+            const regions = ['central', 'south', 'east', 'west', 'north'];
+            const labels = regions.map(formatAreaName);
+            const data = regions.map(region => psiData[region]);
+            
+            // Determine colors based on PSI levels
+            const backgroundColor = data.map(value => {
+                const status = getPsiStatus(value);
+                return status.color.split(' ')[0].replace('bg-', 'rgba(') + ', 0.6)';
+            });
+            
+            // Destroy existing chart if it exists
+            if (regionChart) {
+                regionChart.destroy();
+            }
+            
+            // Create new chart
+            regionChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'PSI Level',
+                        data: data,
+                        backgroundColor: backgroundColor,
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'PSI Value'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const value = context.raw;
+                                    const status = getPsiStatus(value);
+                                    return `Status: ${status.status}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Update pollutant chart
+        function updatePollutantChart(pm25Data) {
+            const ctx = document.getElementById('pollutantChart').getContext('2d');
+            
+            // Extract data
+            const regions = ['central', 'south', 'east', 'west', 'north'];
+            const labels = regions.map(formatAreaName);
+            const data = regions.map(region => pm25Data[region]);
+            
+            // Destroy existing chart if it exists
+            if (pollutantChart) {
+                pollutantChart.destroy();
+            }
+            
+            // Create new chart
+            pollutantChart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'PM2.5 (μg/m³)',
+                        data: data,
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgba(54, 162, 235, 1)',
+                        pointRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            ticks: {
+                                display: false
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Find the worst hit area (highest PSI)
+        function findWorstHitArea(psiData) {
+            const regions = ['central', 'south', 'east', 'west', 'north'];
+            let worstArea = 'national';
+            let worstValue = psiData.national;
+            
+            regions.forEach(region => {
+                if (psiData[region] > worstValue) {
+                    worstValue = psiData[region];
+                    worstArea = region;
+                }
+            });
+            
+            return { area: worstArea, value: worstValue };
+        }
+        
+        // Find the dominant pollutant (highest sub-index)
+        function findDominantPollutant(readings) {
+            const pollutants = ['o3_sub_index', 'pm10_sub_index', 'pm25_sub_index', 
+                               'co_sub_index', 'so2_sub_index', 'no2_sub_index'];
+            
+            let dominantPollutant = '';
+            let dominantValue = 0;
+            let dominantArea = 'national';
+            
+            pollutants.forEach(pollutant => {
+                const regions = ['national', 'central', 'south', 'east', 'west', 'north'];
+                
+                regions.forEach(region => {
+                    const value = readings[pollutant][region];
+                    
+                    if (value > dominantValue) {
+                        dominantValue = value;
+                        dominantPollutant = pollutant.replace('_sub_index', '');
+                        dominantArea = region;
+                    }
+                });
+            });
+            
+            return { pollutant: dominantPollutant, value: dominantValue, area: dominantArea };
+        }
+        
+        // Get PSI status category
+        function getPsiStatus(value) {
+            for (const category of psiStatusCategories) {
+                if (value >= category.min && value <= category.max) {
+                    return category;
+                }
+            }
+            return psiStatusCategories[psiStatusCategories.length - 1]; // Default to extreme
+        }
+        
+        // Format date and time
+        function formatDateTime(date) {
+            const options = { 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric', 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: false,
+                timeZoneName: 'short'
+            };
+            return date.toLocaleString('en-SG', options);
+        }
+        
+        // Format area name for display
+        function formatAreaName(area) {
+            return area.charAt(0).toUpperCase() + area.slice(1);
+        }
+        
+        // Show loading modal
+        function showLoading() {
+            loadingModal.classList.remove('hidden');
+        }
+        
+        // Hide loading modal
+        function hideLoading() {
+            loadingModal.classList.add('hidden');
+        }
+        
+        // Display error message in table
+        function displayError(message) {
+            psiTableBody.innerHTML = `
+                <tr>
+                    <td colspan="8" class="px-6 py-4 text-center text-red-500">
+                        <i class="fa fa-exclamation-circle mr-2"></i>${message}
+                    </td>
+                </tr>
+            ` ;
+        }
+        
+        // Toggle auto-refresh
+        function toggleAutoRefresh() {
+            if (autoRefreshCheckbox.checked) {
+                // Start auto-refresh
+                autoRefreshIntervalId = setInterval(loadMockData, AUTO_REFRESH_INTERVAL);
+                refreshBtn.classList.add('animate-pulse-slow');
+            } else {
+                // Stop auto-refresh
+                clearInterval(autoRefreshIntervalId);
+                refreshBtn.classList.remove('animate-pulse-slow');
+            }
+        }
+        
+        // Sort table by selected column
+        function sortTable() {
+            const sortBy = sortSelect.value;
+            
+            // Get all table rows
+            const rows = Array.from(psiTableBody.querySelectorAll('tr'));
+            
+            // Sort rows based on selected column
+            rows.sort((a, b) => {
+                let aValue, bValue;
+                
+                if (sortBy === 'parameter') {
+                    // Sort by parameter name
+                    aValue = a.querySelector('td').textContent.toLowerCase();
+                    bValue = b.querySelector('td').textContent.toLowerCase();
+                } else {
+                    // Sort by numeric value in selected column
+                    const columns = ['national', 'central', 'south', 'east', 'west', 'north'];
+                    const columnIndex = columns.indexOf(sortBy) + 1; // +1 because first column is parameter
+                    
+                    aValue = parseFloat(a.querySelectorAll('td')[columnIndex].textContent) || 0;
+                    bValue = parseFloat(b.querySelectorAll('td')[columnIndex].textContent) || 0;
+                }
+                
+                if (aValue < bValue) return -1;
+                if (aValue > bValue) return 1;
+                return 0;
+            });
+            
+            // Clear table and re-add sorted rows
+            psiTableBody.innerHTML = '';
+            rows.forEach(row => psiTableBody.appendChild(row));
+        }
+    </script>
 </body>
 </html>
